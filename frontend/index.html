@@ -1,0 +1,507 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SpeechCare AI - Speech Analysis for Cognitive Health</title>
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+        
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        
+        .gradient-bg {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+        
+        .card-shadow {
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.1);
+        }
+        
+        .fade-in {
+            animation: fadeIn 0.5s ease-in;
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        .pulse-dot {
+            animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+        }
+        
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+    </style>
+</head>
+<body class="bg-gray-50">
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect } = React;
+
+        // Configuration - Update this with your backend URL
+        const API_BASE_URL = 'http://localhost:5000/api';
+
+        function App() {
+            const [activeSection, setActiveSection] = useState('home');
+            const [textInput, setTextInput] = useState('');
+            const [isAnalyzing, setIsAnalyzing] = useState(false);
+            const [analysisResult, setAnalysisResult] = useState(null);
+            const [error, setError] = useState(null);
+            const [wordCount, setWordCount] = useState(0);
+            const [uploadedFile, setUploadedFile] = useState(null);
+            const [backendStatus, setBackendStatus] = useState('checking');
+
+            // Check backend health on mount
+            useEffect(() => {
+                checkBackendHealth();
+            }, []);
+
+            const checkBackendHealth = async () => {
+                try {
+                    const response = await fetch(`${API_BASE_URL}/health`);
+                    if (response.ok) {
+                        setBackendStatus('connected');
+                    } else {
+                        setBackendStatus('error');
+                    }
+                } catch (err) {
+                    setBackendStatus('error');
+                }
+            };
+
+            useEffect(() => {
+                const words = textInput.trim().split(/\s+/).filter(word => word.length > 0);
+                setWordCount(words.length);
+            }, [textInput]);
+
+            const handleFileUpload = async (event) => {
+                const file = event.target.files[0];
+                if (!file) return;
+
+                const formData = new FormData();
+                formData.append('file', file);
+
+                try {
+                    const response = await fetch(`${API_BASE_URL}/upload-file`, {
+                        method: 'POST',
+                        body: formData
+                    });
+
+                    const data = await response.json();
+
+                    if (data.success) {
+                        setTextInput(data.text);
+                        setUploadedFile(file.name);
+                        setError(null);
+                    } else {
+                        setError(data.message || 'Failed to upload file');
+                    }
+                } catch (err) {
+                    setError('Failed to upload file. Please ensure the backend is running.');
+                }
+            };
+
+            const analyzeText = async () => {
+                if (wordCount < 150) {
+                    setError('Please enter at least 150 words for accurate analysis.');
+                    return;
+                }
+
+                setIsAnalyzing(true);
+                setError(null);
+                setAnalysisResult(null);
+
+                try {
+                    const response = await fetch(`${API_BASE_URL}/analyze`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            text: textInput
+                        })
+                    });
+
+                    const data = await response.json();
+
+                    if (data.success) {
+                        setAnalysisResult(data.analysis);
+                    } else {
+                        setError(data.message || 'Analysis failed. Please try again.');
+                    }
+                } catch (err) {
+                    setError('Failed to connect to backend. Please ensure the server is running on port 5000.');
+                    console.error('Analysis error:', err);
+                } finally {
+                    setIsAnalyzing(false);
+                }
+            };
+
+            const saveAnalysis = async () => {
+                if (!analysisResult) return;
+
+                try {
+                    const response = await fetch(`${API_BASE_URL}/save-analysis`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            text: textInput,
+                            analysis: analysisResult,
+                            user_id: 'user_' + Date.now()
+                        })
+                    });
+
+                    const data = await response.json();
+
+                    if (data.success) {
+                        alert(`Analysis saved successfully to: ${data.filename}`);
+                    } else {
+                        alert('Failed to save analysis: ' + data.message);
+                    }
+                } catch (err) {
+                    alert('Failed to save analysis. Please ensure the backend is running.');
+                }
+            };
+
+            const resetAnalysis = () => {
+                setTextInput('');
+                setAnalysisResult(null);
+                setError(null);
+                setWordCount(0);
+                setUploadedFile(null);
+            };
+
+            return (
+                <div className="min-h-screen">
+                    {/* Backend Status Indicator */}
+                    {backendStatus === 'error' && (
+                        <div className="bg-red-500 text-white py-2 px-4 text-center text-sm">
+                            ⚠️ Backend not connected. Please start the Python server on port 5000.
+                        </div>
+                    )}
+                    {backendStatus === 'connected' && (
+                        <div className="bg-green-500 text-white py-2 px-4 text-center text-sm">
+                            ✓ Connected to backend server
+                        </div>
+                    )}
+
+                    {/* Navigation */}
+                    <nav className="bg-white shadow-sm sticky top-0 z-50">
+                        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                            <div className="flex justify-between items-center h-16">
+                                <div className="flex items-center space-x-2">
+                                    <div className="w-8 h-8 gradient-bg rounded-lg flex items-center justify-center">
+                                        <span className="text-white font-bold text-lg">S</span>
+                                    </div>
+                                    <span className="text-xl font-bold text-gray-800">SpeechCare AI</span>
+                                </div>
+                                <div className="hidden md:flex space-x-8">
+                                    <button 
+                                        onClick={() => setActiveSection('home')}
+                                        className={`${activeSection === 'home' ? 'text-purple-600 border-b-2 border-purple-600' : 'text-gray-600 hover:text-purple-600'} pb-1 transition-colors`}
+                                    >
+                                        Home
+                                    </button>
+                                    <button 
+                                        onClick={() => setActiveSection('analyze')}
+                                        className={`${activeSection === 'analyze' ? 'text-purple-600 border-b-2 border-purple-600' : 'text-gray-600 hover:text-purple-600'} pb-1 transition-colors`}
+                                    >
+                                        Analyze
+                                    </button>
+                                    <button 
+                                        onClick={() => setActiveSection('about')}
+                                        className={`${activeSection === 'about' ? 'text-purple-600 border-b-2 border-purple-600' : 'text-gray-600 hover:text-purple-600'} pb-1 transition-colors`}
+                                    >
+                                        About
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </nav>
+
+                    {/* Home Section */}
+                    {activeSection === 'home' && (
+                        <div className="fade-in">
+                            {/* Hero Section */}
+                            <div className="gradient-bg text-white py-20">
+                                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                                    <div className="text-center">
+                                        <h1 className="text-5xl font-bold mb-6">AI-Powered Speech Analysis</h1>
+                                        <p className="text-xl mb-8 text-purple-100 max-w-3xl mx-auto">
+                                            Advanced cognitive health screening through speech pattern analysis. 
+                                            Early detection can make a significant difference.
+                                        </p>
+                                        <button 
+                                            onClick={() => setActiveSection('analyze')}
+                                            className="bg-white text-purple-600 px-8 py-3 rounded-lg font-semibold hover:bg-purple-50 transition-colors shadow-lg"
+                                        >
+                                            Start Analysis
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Features Section */}
+                            <div className="py-20 bg-white">
+                                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                                    <h2 className="text-3xl font-bold text-center mb-12 text-gray-800">How It Works</h2>
+                                    <div className="grid md:grid-cols-3 gap-8">
+                                        <div className="text-center p-6">
+                                            <div className="w-16 h-16 gradient-bg rounded-full flex items-center justify-center mx-auto mb-4">
+                                                <span className="text-white text-2xl font-bold">1</span>
+                                            </div>
+                                            <h3 className="text-xl font-semibold mb-3 text-gray-800">Submit Text</h3>
+                                            <p className="text-gray-600">
+                                                Type or upload a minimum of 150 words of written speech or transcribed conversation for analysis.
+                                            </p>
+                                        </div>
+                                        <div className="text-center p-6">
+                                            <div className="w-16 h-16 gradient-bg rounded-full flex items-center justify-center mx-auto mb-4">
+                                                <span className="text-white text-2xl font-bold">2</span>
+                                            </div>
+                                            <h3 className="text-xl font-semibold mb-3 text-gray-800">AI Analysis</h3>
+                                            <p className="text-gray-600">
+                                                Our Python backend processes the text through Claude AI to examine linguistic patterns and cognitive markers.
+                                            </p>
+                                        </div>
+                                        <div className="text-center p-6">
+                                            <div className="w-16 h-16 gradient-bg rounded-full flex items-center justify-center mx-auto mb-4">
+                                                <span className="text-white text-2xl font-bold">3</span>
+                                            </div>
+                                            <h3 className="text-xl font-semibold mb-3 text-gray-800">Get Results</h3>
+                                            <p className="text-gray-600">
+                                                Receive detailed insights and save your analysis report for future reference or professional consultation.
+                                            </p>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Info Section */}
+                            <div className="py-20 bg-gray-50">
+                                <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
+                                    <div className="bg-white rounded-lg p-8 card-shadow">
+                                        <h2 className="text-2xl font-bold mb-4 text-gray-800">Important Information</h2>
+                                        <div className="space-y-4 text-gray-600">
+                                            <p>
+                                                <strong>This is a screening tool, not a diagnostic tool.</strong> The analysis provided 
+                                                is meant to help identify potential areas of concern that may warrant further professional evaluation.
+                                            </p>
+                                            <p>
+                                                Early detection of speech and cognitive changes can lead to better outcomes. If you have 
+                                                concerns about cognitive health, please consult with a healthcare professional.
+                                            </p>
+                                            <p>
+                                                Speech patterns can be affected by many factors including stress, fatigue, medication, 
+                                                and various medical conditions. A comprehensive evaluation by qualified professionals is 
+                                                necessary for proper diagnosis.
+                                            </p>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Analyze Section */}
+                    {activeSection === 'analyze' && (
+                        <div className="fade-in py-12">
+                            <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
+                                <div className="bg-white rounded-lg p-8 card-shadow">
+                                    <h2 className="text-3xl font-bold mb-6 text-gray-800">Speech Analysis</h2>
+                                    
+                                    {!analysisResult ? (
+                                        <>
+                                            <p className="text-gray-600 mb-6">
+                                                Please enter at least 150 words of text for analysis, or upload a text file. 
+                                                This can be a transcription of spoken words, written communication, or any text sample you'd like analyzed.
+                                            </p>
+
+                                            {/* File Upload Section */}
+                                            <div className="mb-6 p-4 border-2 border-dashed border-gray-300 rounded-lg hover:border-purple-400 transition-colors">
+                                                <label className="flex flex-col items-center cursor-pointer">
+                                                    <svg className="w-12 h-12 text-gray-400 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                                                    </svg>
+                                                    <span className="text-sm text-gray-600 mb-2">
+                                                        {uploadedFile ? `Uploaded: ${uploadedFile}` : 'Click to upload a text file'}
+                                                    </span>
+                                                    <input 
+                                                        type="file" 
+                                                        accept=".txt,.doc,.docx"
+                                                        onChange={handleFileUpload}
+                                                        className="hidden"
+                                                    />
+                                                </label>
+                                            </div>
+                                            
+                                            <div className="mb-4">
+                                                <div className="flex justify-between items-center mb-2">
+                                                    <label className="text-sm font-medium text-gray-700">
+                                                        Text Input
+                                                    </label>
+                                                    <span className={`text-sm ${wordCount >= 150 ? 'text-green-600' : 'text-gray-500'}`}>
+                                                        {wordCount} / 150 words
+                                                    </span>
+                                                </div>
+                                                <textarea
+                                                    value={textInput}
+                                                    onChange={(e) => setTextInput(e.target.value)}
+                                                    placeholder="Enter or paste text here..."
+                                                    rows="12"
+                                                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent resize-none"
+                                                    disabled={isAnalyzing}
+                                                />
+                                            </div>
+
+                                            {error && (
+                                                <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700">
+                                                    {error}
+                                                </div>
+                                            )}
+
+                                            <button
+                                                onClick={analyzeText}
+                                                disabled={isAnalyzing || wordCount < 150 || backendStatus !== 'connected'}
+                                                className={`w-full py-3 rounded-lg font-semibold transition-all ${
+                                                    isAnalyzing || wordCount < 150 || backendStatus !== 'connected'
+                                                        ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                                                        : 'gradient-bg text-white hover:opacity-90 shadow-lg'
+                                                }`}
+                                            >
+                                                {isAnalyzing ? (
+                                                    <span className="flex items-center justify-center">
+                                                        <span className="pulse-dot mr-2">●</span>
+                                                        Analyzing...
+                                                    </span>
+                                                ) : backendStatus !== 'connected' ? (
+                                                    'Backend Not Connected'
+                                                ) : (
+                                                    'Analyze Text'
+                                                )}
+                                            </button>
+                                        </>
+                                    ) : (
+                                        <>
+                                            <div className="mb-6 p-6 bg-purple-50 rounded-lg border border-purple-200">
+                                                <h3 className="text-xl font-semibold mb-4 text-purple-900">Analysis Results</h3>
+                                                <div className="prose prose-purple max-w-none text-gray-700 whitespace-pre-wrap">
+                                                    {analysisResult}
+                                                </div>
+                                            </div>
+
+                                            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-6">
+                                                <p className="text-sm text-yellow-800">
+                                                    <strong>Important:</strong> This analysis is for informational purposes only and 
+                                                    should not be used as a substitute for professional medical advice. Please consult 
+                                                    with a healthcare provider for proper evaluation and diagnosis.
+                                                </p>
+                                            </div>
+
+                                            <div className="flex gap-4">
+                                                <button
+                                                    onClick={saveAnalysis}
+                                                    className="flex-1 py-3 rounded-lg font-semibold gradient-bg text-white hover:opacity-90 transition-colors"
+                                                >
+                                                    💾 Save Analysis
+                                                </button>
+                                                <button
+                                                    onClick={resetAnalysis}
+                                                    className="flex-1 py-3 rounded-lg font-semibold bg-gray-200 text-gray-700 hover:bg-gray-300 transition-colors"
+                                                >
+                                                    🔄 New Analysis
+                                                </button>
+                                            </div>
+                                        </>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* About Section */}
+                    {activeSection === 'about' && (
+                        <div className="fade-in py-12">
+                            <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
+                                <div className="bg-white rounded-lg p-8 card-shadow">
+                                    <h2 className="text-3xl font-bold mb-6 text-gray-800">About SpeechCare AI</h2>
+                                    
+                                    <div className="space-y-6 text-gray-600">
+                                        <p>
+                                            SpeechCare AI is an advanced artificial intelligence platform designed to analyze 
+                                            speech patterns and identify potential indicators of cognitive changes that may be 
+                                            associated with conditions like dementia and other cognitive impairments.
+                                        </p>
+                                        
+                                        <h3 className="text-xl font-semibold text-gray-800 mt-8 mb-3">Our Technology Stack</h3>
+                                        <ul className="list-disc list-inside space-y-2 ml-4">
+                                            <li><strong>Frontend:</strong> React with Tailwind CSS for responsive design</li>
+                                            <li><strong>Backend:</strong> Python Flask REST API</li>
+                                            <li><strong>AI Engine:</strong> Claude AI by Anthropic</li>
+                                            <li><strong>File Processing:</strong> Support for text file uploads and analysis storage</li>
+                                        </ul>
+                                        
+                                        <h3 className="text-xl font-semibold text-gray-800 mt-8 mb-3">What We Analyze</h3>
+                                        <ul className="list-disc list-inside space-y-2 ml-4">
+                                            <li>Overall coherence and logical flow</li>
+                                            <li>Vocabulary diversity and richness</li>
+                                            <li>Sentence structure complexity</li>
+                                            <li>Repetition patterns</li>
+                                            <li>Semantic coherence</li>
+                                            <li>Linguistic markers associated with cognitive changes</li>
+                                        </ul>
+                                        
+                                        <h3 className="text-xl font-semibold text-gray-800 mt-8 mb-3">Features</h3>
+                                        <ul className="list-disc list-inside space-y-2 ml-4">
+                                            <li>Text input with real-time word counting</li>
+                                            <li>File upload support for easy analysis</li>
+                                            <li>Comprehensive AI-powered analysis</li>
+                                            <li>Save analysis results to files</li>
+                                            <li>Secure backend processing</li>
+                                        </ul>
+                                        
+                                        <h3 className="text-xl font-semibold text-gray-800 mt-8 mb-3">Important Disclaimers</h3>
+                                        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                                            <ul className="space-y-2">
+                                                <li>• This tool is for screening purposes only, not for diagnosis</li>
+                                                <li>• Results should be discussed with qualified healthcare professionals</li>
+                                                <li>• Many factors can affect speech patterns beyond cognitive health</li>
+                                                <li>• This tool does not replace professional medical evaluation</li>
+                                                <li>• Analysis data is processed securely through our backend</li>
+                                            </ul>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Footer */}
+                    <footer className="bg-gray-800 text-white py-8 mt-20">
+                        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
+                            <p className="mb-2">© 2024 SpeechCare AI. Powered by Claude AI (Anthropic) + Python Flask Backend.</p>
+                            <p className="text-sm text-gray-400">
+                                This is a screening tool for educational and informational purposes only.
+                            </p>
+                        </div>
+                    </footer>
+                </div>
+            );
+        }
+
+        ReactDOM.render(<App />, document.getElementById('root'));
+    </script>
+</body>
+</html>
