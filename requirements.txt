@@ -1,0 +1,8 @@
+flask flask-cors
+numpy
+torch
+torchaudio
+soundfile
+whisper
+python-dotenv
+requests

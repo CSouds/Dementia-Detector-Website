@@ -8,6 +8,7 @@
     <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
         
@@ -40,6 +41,83 @@
             0%, 100% { opacity: 1; }
             50% { opacity: 0.5; }
         }
+        
+        /* Markdown Styles */
+        .markdown-content h1 {
+            font-size: 2em;
+            font-weight: bold;
+            margin-top: 1em;
+            margin-bottom: 0.5em;
+            color: #1a202c;
+        }
+        
+        .markdown-content h2 {
+            font-size: 1.5em;
+            font-weight: bold;
+            margin-top: 1.5em;
+            margin-bottom: 0.5em;
+            color: #2d3748;
+            border-bottom: 2px solid #e2e8f0;
+            padding-bottom: 0.3em;
+        }
+        
+        .markdown-content h3 {
+            font-size: 1.25em;
+            font-weight: 600;
+            margin-top: 1em;
+            margin-bottom: 0.5em;
+            color: #4a5568;
+        }
+        
+        .markdown-content p {
+            margin-bottom: 1em;
+            line-height: 1.6;
+        }
+        
+        .markdown-content ul, .markdown-content ol {
+            margin-left: 1.5em;
+            margin-bottom: 1em;
+        }
+        
+        .markdown-content li {
+            margin-bottom: 0.5em;
+        }
+        
+        .markdown-content strong {
+            font-weight: 600;
+            color: #2d3748;
+        }
+        
+        .markdown-content hr {
+            margin: 2em 0;
+            border: none;
+            border-top: 1px solid #e2e8f0;
+        }
+        
+        .markdown-content code {
+            background-color: #f7fafc;
+            padding: 0.2em 0.4em;
+            border-radius: 3px;
+            font-family: monospace;
+            font-size: 0.9em;
+        }
+        
+        .markdown-content pre {
+            background-color: #f7fafc;
+            padding: 1em;
+            border-radius: 5px;
+            overflow-x: auto;
+            margin-bottom: 1em;
+        }
+        
+        .markdown-content blockquote {
+            border-left: 4px solid #667eea;
+            padding-left: 1em;
+            margin-left: 0;
+            margin-bottom: 1em;
+            color: #4a5568;
+            font-style: italic;
+        }
     </style>
 </head>
 <body class="bg-gray-50">
@@ -48,8 +126,8 @@
     <script type="text/babel">
         const { useState, useEffect } = React;
 
-        // Configuration - Update this with your backend URL
-        const API_BASE_URL = 'http://localhost:5000/api';
+        // Configuration - UPDATED TO PORT 5001
+        const API_BASE_URL = 'http://localhost:5001/api';
 
         function App() {
             const [activeSection, setActiveSection] = useState('home');
@@ -87,6 +165,9 @@
             const handleFileUpload = async (event) => {
                 const file = event.target.files[0];
                 if (!file) return;
+
+                // FIXED: Switch to analyze section before uploading
+                setActiveSection('analyze');
 
                 const formData = new FormData();
                 formData.append('file', file);
@@ -133,15 +214,21 @@
                     });
 
                     const data = await response.json();
+                    
+                    console.log('Backend response:', data);
 
                     if (data.success) {
-                        setAnalysisResult(data.analysis);
+                        // Make sure analysis is a string
+                        const analysisText = typeof data.analysis === 'string' 
+                            ? data.analysis 
+                            : JSON.stringify(data.analysis, null, 2);
+                        setAnalysisResult(analysisText);
                     } else {
                         setError(data.message || 'Analysis failed. Please try again.');
                     }
                 } catch (err) {
-                    setError('Failed to connect to backend. Please ensure the server is running on port 5000.');
                     console.error('Analysis error:', err);
+                    setError(`Failed to connect to backend: ${err.message}. Please ensure the server is running on port 5001.`);
                 } finally {
                     setIsAnalyzing(false);
                 }
@@ -188,12 +275,12 @@
                     {/* Backend Status Indicator */}
                     {backendStatus === 'error' && (
                         <div className="bg-red-500 text-white py-2 px-4 text-center text-sm">
-                            ⚠️ Backend not connected. Please start the Python server on port 5000.
+                            ⚠️ Backend not connected. Please start the Python server on port 5001.
                         </div>
                     )}
                     {backendStatus === 'connected' && (
                         <div className="bg-green-500 text-white py-2 px-4 text-center text-sm">
-                            ✓ Connected to backend server
+                            ✓ Connected to backend server (Port 5001)
                         </div>
                     )}
 
@@ -273,7 +360,7 @@
                                             </div>
                                             <h3 className="text-xl font-semibold mb-3 text-gray-800">AI Analysis</h3>
                                             <p className="text-gray-600">
-                                                Our Python backend processes the text through Claude AI to examine linguistic patterns and cognitive markers.
+                                                Our Python backend processes the text through Archia's Dementia Detector agent to examine linguistic patterns and cognitive markers.
                                             </p>
                                         </div>
                                         <div className="text-center p-6">
@@ -388,6 +475,8 @@
                                                     </span>
                                                 ) : backendStatus !== 'connected' ? (
                                                     'Backend Not Connected'
+                                                ) : wordCount < 150 ? (
+                                                    `Need ${150 - wordCount} more words`
                                                 ) : (
                                                     'Analyze Text'
                                                 )}
@@ -397,9 +486,10 @@
                                         <>
                                             <div className="mb-6 p-6 bg-purple-50 rounded-lg border border-purple-200">
                                                 <h3 className="text-xl font-semibold mb-4 text-purple-900">Analysis Results</h3>
-                                                <div className="prose prose-purple max-w-none text-gray-700 whitespace-pre-wrap">
-                                                    {analysisResult}
-                                                </div>
+                                                <div 
+                                                    className="markdown-content text-gray-700"
+                                                    dangerouslySetInnerHTML={{ __html: marked.parse(analysisResult) }}
+                                                />
                                             </div>
 
                                             <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-6">
@@ -449,7 +539,7 @@
                                         <ul className="list-disc list-inside space-y-2 ml-4">
                                             <li><strong>Frontend:</strong> React with Tailwind CSS for responsive design</li>
                                             <li><strong>Backend:</strong> Python Flask REST API</li>
-                                            <li><strong>AI Engine:</strong> Claude AI by Anthropic</li>
+                                            <li><strong>AI Engine:</strong> Archia Dementia Detector Agent</li>
                                             <li><strong>File Processing:</strong> Support for text file uploads and analysis storage</li>
                                         </ul>
                                         
@@ -491,7 +581,7 @@
                     {/* Footer */}
                     <footer className="bg-gray-800 text-white py-8 mt-20">
                         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-                            <p className="mb-2">© 2024 SpeechCare AI. Powered by Claude AI (Anthropic) + Python Flask Backend.</p>
+                            <p className="mb-2">© 2024 SpeechCare AI. Powered by Archia Dementia Detector + Python Flask Backend.</p>
                             <p className="text-sm text-gray-400">
                                 This is a screening tool for educational and informational purposes only.
                             </p>
