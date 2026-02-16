@@ -1,2 +1,4 @@
 .env
 .venv
+analysis_results
+uploads
