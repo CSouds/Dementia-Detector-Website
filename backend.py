@@ -41,7 +41,7 @@ def transcribe_text(file):
             previous_end = word.end
 
     text = " ".join(output)
-    text = text.replace(" ,", ",").replace(" .", ".")
+    text = text.replace(" ,", ",").replace(" .", ".").replace("  ", " ")
     # print(text)
 
     return text
