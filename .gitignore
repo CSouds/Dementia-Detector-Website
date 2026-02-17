@@ -2,3 +2,4 @@
 .venv
 analysis_results
 uploads
+.DS_STORE

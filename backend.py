@@ -4,13 +4,47 @@ import requests
 import os
 from datetime import datetime
 import json
+from faster_whisper import WhisperModel
 
 app = Flask(__name__)
-CORS(app)  # Enable CORS for frontend communication
+CORS(app)
 
 # Archia Configuration
 ARCHIA_TOKEN = "ask_U5slEz8M-QXZQ0Vmn3PKloJ-mTGnOC5G52Eeyjv623E="
 BASE_URL = "https://registry.archia.app/v1"
+
+def transcribe_text(file):
+    # print(file)
+
+    model = WhisperModel(
+    "base",
+    device="cpu",
+    compute_type="float32"
+    )
+
+    segments, info = model.transcribe(
+        file,
+        word_timestamps=True
+    )
+
+    pause_threshold = 0.5
+    output = []
+    previous_end = None
+
+    for segment in segments:
+        for word in segment.words:
+            if previous_end is not None:
+                gap = word.start - previous_end
+                if gap >= pause_threshold:
+                    output.append(f"(pause for {gap:.1f}s)")
+            output.append(word.word)
+            previous_end = word.end
+
+    text = " ".join(output)
+    text = text.replace(" ,", ",").replace(" .", ".")
+    # print(text)
+
+    return text
 
 def call_archia_agent(prompt):
     """Call the Archia Dementia Detector agent"""
@@ -28,8 +62,8 @@ def call_archia_agent(prompt):
     return response.json()
 
 # Create directories for uploads and analysis results
-os.makedirs('uploads', exist_ok=True)
-os.makedirs('analysis_results', exist_ok=True)
+os.makedirs('../uploads', exist_ok=True)
+os.makedirs('../analysis_results', exist_ok=True)
 
 @app.route('/api/health', methods=['GET'])
 def health_check():
@@ -60,9 +94,9 @@ def upload_file():
         # Read file content
         if file.filename.endswith('.txt'):
             text = file.read().decode('utf-8')
+        elif file.filename.endswith('.wav') or file.filename.endswith('.mp3'):
+            text = transcribe_text(file)
         elif file.filename.endswith('.doc') or file.filename.endswith('.docx'):
-            # For .doc/.docx files, you'd need python-docx library
-            # For now, we'll just handle .txt files
             return jsonify({
                 'success': False,
                 'message': 'Please convert your document to .txt format'
@@ -70,13 +104,13 @@ def upload_file():
         else:
             return jsonify({
                 'success': False,
-                'message': 'Unsupported file format. Please use .txt files'
+                'message': 'Unsupported file format. Please use .txt, .wav, or .mp3 files'
             }), 400
         
         # Save uploaded file
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
         filename = f"upload_{timestamp}_{file.filename}"
-        filepath = os.path.join('uploads', filename)
+        filepath = os.path.join('../uploads', filename)
         
         with open(filepath, 'w', encoding='utf-8') as f:
             f.write(text)
@@ -154,7 +188,7 @@ def save_analysis():
         # Create filename with timestamp
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
         filename = f"analysis_{user_id}_{timestamp}.json"
-        filepath = os.path.join('analysis_results', filename)
+        filepath = os.path.join('../analysis_results', filename)
         
         # Prepare data to save
         save_data = {
